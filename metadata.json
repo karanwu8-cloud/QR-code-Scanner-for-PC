@@ -1,0 +1,5 @@
+{
+  "name": "QR Code Scanner",
+  "description": "A simple web app to scan QR codes using your device's camera.",
+  "requestFramePermissions": ["camera"]
+}
