@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import jsQR from 'jsqr';
-import { Camera, Copy, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
+import { Camera, Copy, ExternalLink, RefreshCw, AlertCircle, Image as ImageIcon } from 'lucide-react';
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -17,6 +17,7 @@ export default function App() {
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const requestRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -130,6 +131,55 @@ export default function App() {
     startCamera(activeCameraId || undefined);
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Scale down to avoid massive processing pauses
+        const maxDim = 1000;
+        if (width > maxDim || height > maxDim) {
+           const ratio = Math.min(maxDim / width, maxDim / height);
+           width *= ratio;
+           height *= ratio;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert"
+        });
+
+        if (code) {
+           stopCamera();
+           setResult(code.data);
+           setError(null);
+        } else {
+           setError("No QR code found in the uploaded image.");
+           setResult(null);
+           stopCamera();
+        }
+      };
+      if (typeof event.target?.result === 'string') {
+        img.src = event.target.result;
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // Reset input
+  };
+
   const [copied, setCopied] = useState(false);
   const copyToClipboard = () => {
     if (result) {
@@ -151,15 +201,31 @@ export default function App() {
             <Camera className="w-6 h-6 text-zinc-300" />
             <h1 className="text-xl font-semibold tracking-tight">QR Scanner</h1>
           </div>
-          {cameras.length > 1 && (
+          <div className="flex items-center gap-2">
+            <input 
+              type="file" 
+              accept="image/*" 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+            />
             <button 
-              onClick={handleSwitchCamera}
+              onClick={() => fileInputRef.current?.click()}
               className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
-              title="Switch Camera"
+              title="Upload Image"
             >
-              <RefreshCw className="w-5 h-5 text-zinc-300" />
+              <ImageIcon className="w-5 h-5 text-zinc-300" />
             </button>
-          )}
+            {cameras.length > 1 && (
+              <button 
+                onClick={handleSwitchCamera}
+                className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
+                title="Switch Camera"
+              >
+                <RefreshCw className="w-5 h-5 text-zinc-300" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Scanner Area */}
@@ -242,9 +308,18 @@ export default function App() {
               </button>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-zinc-500 font-medium">Point your camera at a QR code</p>
-              <p className="text-zinc-400 text-sm mt-1">It will scan automatically</p>
+            <div className="text-center py-8 flex flex-col items-center justify-center gap-4">
+              <div>
+                <p className="text-zinc-500 font-medium">Point your camera at a QR code</p>
+                <p className="text-zinc-400 text-sm mt-1">or upload an image below</p>
+              </div>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-2 px-4 rounded-xl font-medium transition-colors text-sm"
+              >
+                <ImageIcon className="w-4 h-4" />
+                Upload Image
+              </button>
             </div>
           )}
         </div>
