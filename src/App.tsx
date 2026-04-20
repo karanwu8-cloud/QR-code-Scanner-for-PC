@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import jsQR from 'jsqr';
-import { Camera, Copy, ExternalLink, RefreshCw, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Camera, Copy, ExternalLink, RefreshCw, AlertCircle, Image as ImageIcon, Upload } from 'lucide-react';
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -18,6 +18,7 @@ export default function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const requestRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -131,10 +132,7 @@ export default function App() {
     startCamera(activeCameraId || undefined);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processImageFile = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -177,8 +175,41 @@ export default function App() {
       }
     };
     reader.readAsDataURL(file);
+  }, [stopCamera]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImageFile(file);
     e.target.value = ''; // Reset input
   };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      processImageFile(file);
+    } else if (file) {
+      setError("Please drop a valid image file.");
+      setResult(null);
+      stopCamera();
+    }
+  }, [processImageFile, stopCamera]);
 
   const [copied, setCopied] = useState(false);
   const copyToClipboard = () => {
@@ -192,8 +223,20 @@ export default function App() {
   const isUrl = result && (result.startsWith('http://') || result.startsWith('https://'));
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex flex-col items-center py-8 px-4 font-sans">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-zinc-100">
+    <div 
+      className="min-h-screen bg-zinc-50 flex flex-col items-center py-8 px-4 font-sans relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <div className={`w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden relative transition-all duration-200 border ${isDragging ? 'border-green-500 ring-4 ring-green-500/20' : 'border-zinc-100'}`}>
+        
+        {isDragging && (
+          <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
+            <Upload className="w-16 h-16 text-green-500 mb-4 animate-bounce" />
+            <h2 className="text-xl font-bold text-green-600">Drop QR Code Image Here</h2>
+          </div>
+        )}
         
         {/* Header */}
         <div className="bg-zinc-900 text-white p-6 flex items-center justify-between">
@@ -311,7 +354,7 @@ export default function App() {
             <div className="text-center py-8 flex flex-col items-center justify-center gap-4">
               <div>
                 <p className="text-zinc-500 font-medium">Point your camera at a QR code</p>
-                <p className="text-zinc-400 text-sm mt-1">or upload an image below</p>
+                <p className="text-zinc-400 text-sm mt-1">or drop an image anywhere</p>
               </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
