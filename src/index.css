@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --animate-scan: scan 2s ease-in-out infinite;
 
@@ -12,3 +14,4 @@
     }
   }
 }
+

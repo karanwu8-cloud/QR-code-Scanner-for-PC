@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import jsQR from 'jsqr';
-import { Camera, Copy, ExternalLink, RefreshCw, AlertCircle, Image as ImageIcon, Upload } from 'lucide-react';
+import { Camera, Copy, ExternalLink, RefreshCw, AlertCircle, Image as ImageIcon, Upload, Clock, Trash2, Sun, Moon } from 'lucide-react';
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -19,6 +19,46 @@ export default function App() {
   const requestRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('qr-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    } catch {
+      // ignore
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('qr-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
+  const [history, setHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('qr-history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const saveToHistory = useCallback((newResult: string) => {
+    setHistory(prev => {
+      const newHistory = [newResult, ...prev.filter(item => item !== newResult)].slice(0, 5);
+      localStorage.setItem('qr-history', JSON.stringify(newHistory));
+      return newHistory;
+    });
+  }, []);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -48,7 +88,10 @@ export default function App() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute("playsinline", "true"); // required to tell iOS safari we don't want fullscreen
-        videoRef.current.play();
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => console.warn("Video play interrupted:", err));
+        }
         setIsScanning(true);
         requestRef.current = requestAnimationFrame(tick);
       }
@@ -93,6 +136,7 @@ export default function App() {
           
           if (code) {
             setResult(code.data);
+            saveToHistory(code.data);
             // Optional: Draw a box around the QR code
             // drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#FF3B58");
             // drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#FF3B58");
@@ -163,6 +207,7 @@ export default function App() {
         if (code) {
            stopCamera();
            setResult(code.data);
+           saveToHistory(code.data);
            setError(null);
         } else {
            setError("No QR code found in the uploaded image.");
@@ -224,22 +269,22 @@ export default function App() {
 
   return (
     <div 
-      className="min-h-screen bg-zinc-50 flex flex-col items-center py-8 px-4 font-sans relative"
+      className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center py-8 px-4 font-sans relative transition-colors duration-300"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className={`w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden relative transition-all duration-200 border ${isDragging ? 'border-green-500 ring-4 ring-green-500/20' : 'border-zinc-100'}`}>
+      <div className={`w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-xl overflow-hidden relative transition-all duration-300 border ${isDragging ? 'border-green-500 ring-4 ring-green-500/20' : 'border-zinc-100 dark:border-zinc-800'}`}>
         
         {isDragging && (
-          <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
+          <div className="absolute inset-0 z-50 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm flex flex-col items-center justify-center">
             <Upload className="w-16 h-16 text-green-500 mb-4 animate-bounce" />
             <h2 className="text-xl font-bold text-green-600">Drop QR Code Image Here</h2>
           </div>
         )}
         
         {/* Header */}
-        <div className="bg-zinc-900 text-white p-6 flex items-center justify-between">
+        <div className="bg-zinc-900 dark:bg-black text-white p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Camera className="w-6 h-6 text-zinc-300" />
             <h1 className="text-xl font-semibold tracking-tight">QR Scanner</h1>
@@ -268,6 +313,13 @@ export default function App() {
                 <RefreshCw className="w-5 h-5 text-zinc-300" />
               </button>
             )}
+            <button
+              onClick={toggleTheme}
+              className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5 text-zinc-300" /> : <Moon className="w-5 h-5 text-zinc-300" />}
+            </button>
           </div>
         </div>
 
@@ -316,15 +368,15 @@ export default function App() {
         <div className="p-6">
           {result ? (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-green-800 mb-2">Scanned Result</h3>
-                <p className="text-zinc-800 font-mono text-sm break-all">{result}</p>
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/50 rounded-xl p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-green-800 dark:text-green-500 mb-2">Scanned Result</h3>
+                <p className="text-zinc-800 dark:text-zinc-200 font-mono text-sm break-all">{result}</p>
               </div>
               
               <div className="flex gap-3">
                 <button 
                   onClick={copyToClipboard}
-                  className="flex-1 flex items-center justify-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-3 px-4 rounded-xl font-medium transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 py-3 px-4 rounded-xl font-medium transition-colors"
                 >
                   <Copy className="w-4 h-4" />
                   {copied ? 'Copied!' : 'Copy'}
@@ -345,7 +397,7 @@ export default function App() {
               
               <button 
                 onClick={handleRescan}
-                className="w-full mt-2 flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 text-white py-3 px-4 rounded-xl font-medium transition-colors"
+                className="w-full mt-2 flex items-center justify-center gap-2 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 py-3 px-4 rounded-xl font-medium transition-colors"
               >
                 Scan Another Code
               </button>
@@ -353,16 +405,60 @@ export default function App() {
           ) : (
             <div className="text-center py-8 flex flex-col items-center justify-center gap-4">
               <div>
-                <p className="text-zinc-500 font-medium">Point your camera at a QR code</p>
-                <p className="text-zinc-400 text-sm mt-1">or drop an image anywhere</p>
+                <p className="text-zinc-500 dark:text-zinc-400 font-medium">Point your camera at a QR code</p>
+                <p className="text-zinc-400 dark:text-zinc-500 text-sm mt-1">or drop an image anywhere</p>
               </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-2 px-4 rounded-xl font-medium transition-colors text-sm"
+                className="flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 py-2 px-4 rounded-xl font-medium transition-colors text-sm"
               >
                 <ImageIcon className="w-4 h-4" />
                 Upload Image
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* History Area */}
+        <div className="border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+              <Clock className="w-4 h-4" />
+              <h3 className="text-sm font-semibold">Recent Scans</h3>
+            </div>
+            {history.length > 0 && (
+              <button
+                onClick={() => {
+                  setHistory([]);
+                  localStorage.removeItem('qr-history');
+                }}
+                className="text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1"
+                title="Clear History"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {history.length > 0 ? (
+            <ul className="space-y-2">
+              {history.map((item, idx) => (
+                <li key={idx} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-sm flex items-center justify-between group shadow-sm">
+                  <span className="font-mono text-zinc-600 dark:text-zinc-300 truncate flex-1 mr-3" title={item}>{item}</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(item);
+                    }} 
+                    className="text-zinc-400 opacity-0 group-hover:opacity-100 xl:opacity-100 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all focus:opacity-100 flex-shrink-0"
+                    title="Copy to clipboard"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-center py-6 text-sm text-zinc-500 dark:text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+              No recent scans yet.
             </div>
           )}
         </div>
